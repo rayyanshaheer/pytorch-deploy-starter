@@ -12,7 +12,7 @@ _DESCRIPTION = (
     "A fine-tuned PyTorch ResNet-18 that recognizes 102 flower species "
     "(Oxford Flowers-102, ~86% test accuracy). Built as an open teaching "
     "resource for students learning to take a model from training to "
-    "production. Code: github.com/rayyanshaheer/pytorch-deploy-starter"
+    "production. Code: github.com/rayyanshaheer/flower-classifier-pytorch"
 )
 
 def classify(image):
