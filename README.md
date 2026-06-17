@@ -4,6 +4,8 @@ An end-to-end, open-source PyTorch project that recognizes **102 flower species*
 
 **What makes it complete:** a fine-tuned PyTorch model, a web demo, a REST API, a container, and CI — the full path from `train.py` to a running app.
 
+**🌸 Live demo:** https://huggingface.co/spaces/rayyanshaheer/flower-classifier-pytorch
+
 ## Results
 
 | | |
