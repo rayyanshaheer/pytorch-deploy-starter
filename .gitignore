@@ -2,8 +2,13 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
-*.pt
-*.pth
 .pytest_cache/
 .ruff_cache/
 .DS_Store
+
+# Raw dataset (large, downloaded by train.py)
+data/
+
+# Ignore stray weights but keep the shipped model artifact
+*.pt
+!artifacts/flowers_resnet18.pt

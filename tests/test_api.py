@@ -1,7 +1,6 @@
 """Tests for the inference API.
 
-These run in CI without downloading model weights by stubbing the predict
-function, so the pipeline stays fast and offline-friendly.
+These stub the predict function so CI stays fast and offline-friendly.
 """
 
 from __future__ import annotations
@@ -40,12 +39,11 @@ def test_predict_returns_predictions(monkeypatch):
     monkeypatch.setattr(
         main,
         "predict",
-        lambda image_bytes, top_k=3: [{"label": "leaf", "confidence": 0.91}],
+        lambda image_bytes, top_k=3: [{"label": "rose", "confidence": 0.97}],
     )
     response = client.post(
         "/predict",
-        files={"file": ("img.png", _fake_png_bytes(), "image/png")},
+        files={"file": ("flower.png", _fake_png_bytes(), "image/png")},
     )
     assert response.status_code == 200
-    body = response.json()
-    assert body["predictions"][0]["label"] == "leaf"
+    assert response.json()["predictions"][0]["label"] == "rose"

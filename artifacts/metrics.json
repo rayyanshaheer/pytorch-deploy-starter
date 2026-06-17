@@ -1,0 +1,9 @@
+{
+  "dataset": "Oxford Flowers-102",
+  "architecture": "ResNet-18 (frozen backbone, fine-tuned head)",
+  "num_classes": 102,
+  "test_accuracy": 0.8642,
+  "epochs": 8,
+  "train_seconds": 1289.6,
+  "device": "cpu"
+}

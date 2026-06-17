@@ -1,4 +1,4 @@
-"""FastAPI service that serves PyTorch model predictions over HTTP.
+"""FastAPI service that serves the Flowers-102 PyTorch classifier over HTTP.
 
 Run locally:
     uvicorn app.main:app --reload
@@ -13,9 +13,9 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from app.model import predict
 
 app = FastAPI(
-    title="PyTorch Deploy Starter",
-    description="A minimal, production-shaped template for serving a PyTorch model.",
-    version="1.0.0",
+    title="Flower Classifier API",
+    description="Serve a fine-tuned PyTorch ResNet-18 that recognizes 102 flower species.",
+    version="2.0.0",
 )
 
 _ALLOWED_TYPES = {"image/jpeg", "image/png"}
@@ -29,7 +29,7 @@ def health() -> dict:
 
 @app.post("/predict")
 async def predict_endpoint(file: UploadFile = File(...)) -> dict:
-    """Accept an image upload and return the model's top predictions."""
+    """Accept an image upload and return the model's top flower predictions."""
     if file.content_type not in _ALLOWED_TYPES:
         raise HTTPException(
             status_code=415,
@@ -40,5 +40,4 @@ async def predict_endpoint(file: UploadFile = File(...)) -> dict:
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file upload.")
 
-    predictions = predict(image_bytes)
-    return {"predictions": predictions}
+    return {"predictions": predict(image_bytes)}

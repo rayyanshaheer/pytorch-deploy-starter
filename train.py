@@ -1,71 +1,122 @@
-"""Minimal PyTorch training loop you can adapt for your own dataset.
+"""Transfer-learning trainer for the Oxford Flowers-102 dataset.
 
-This is intentionally small and framework-pure so students can read it top to
-bottom. It trains a tiny CNN on random tensors as a stand-in for real data,
-then saves the weights to `model.pt`. Replace the dataset and model with your
-own, then point `app/model.py` at the saved weights.
+Fine-tunes a pretrained ResNet-18 to classify 102 flower species. The backbone
+is frozen and only the classifier head is trained, so this runs in minutes on a
+CPU. Outputs:
+
+    artifacts/flowers_resnet18.pt   trained weights
+    artifacts/metrics.json          accuracy + training metadata
 
 Run:
-    python train.py
+    python train.py --epochs 8
 """
 
 from __future__ import annotations
 
+import argparse
+import json
+import time
+from pathlib import Path
+
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
+from torchvision import models
+from torchvision.datasets import Flowers102
+from torchvision.models import ResNet18_Weights
+
+from labels import FLOWER_CLASSES
+
+ARTIFACTS = Path("artifacts")
+WEIGHTS_PATH = ARTIFACTS / "flowers_resnet18.pt"
+METRICS_PATH = ARTIFACTS / "metrics.json"
 
 
-class TinyCNN(nn.Module):
-    """A small convolutional network for 3x32x32 inputs."""
+def build_loaders(batch_size: int) -> tuple[DataLoader, DataLoader]:
+    weights = ResNet18_Weights.DEFAULT
+    tf = weights.transforms()
+    # Flowers102 "train" and "val" splits are 1020 images each (10 per class).
+    # We combine them for training and evaluate on a slice of the large test set.
+    train_a = Flowers102(root="data", split="train", download=True, transform=tf)
+    train_b = Flowers102(root="data", split="val", download=True, transform=tf)
+    train_ds = torch.utils.data.ConcatDataset([train_a, train_b])
+    test_ds = Flowers102(root="data", split="test", download=True, transform=tf)
 
-    def __init__(self, num_classes: int = 4) -> None:
-        super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 16, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d(1),
-        )
-        self.classifier = nn.Linear(32, num_classes)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
-        x = torch.flatten(x, 1)
-        return self.classifier(x)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
+    return train_loader, test_loader
 
 
-def make_demo_loader(samples: int = 256, num_classes: int = 4) -> DataLoader:
-    """Build a fake dataset so the loop runs without external downloads."""
-    images = torch.randn(samples, 3, 32, 32)
-    labels = torch.randint(0, num_classes, (samples,))
-    return DataLoader(TensorDataset(images, labels), batch_size=32, shuffle=True)
+def build_model() -> nn.Module:
+    model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+    for param in model.parameters():
+        param.requires_grad = False
+    model.fc = nn.Linear(model.fc.in_features, len(FLOWER_CLASSES))
+    return model
 
 
-def train(epochs: int = 3) -> None:
+@torch.no_grad()
+def evaluate(model: nn.Module, loader: DataLoader, device: torch.device, max_batches: int) -> float:
+    model.eval()
+    correct = total = 0
+    for i, (images, labels) in enumerate(loader):
+        if i >= max_batches:
+            break
+        images, labels = images.to(device), labels.to(device)
+        preds = model(images).argmax(dim=1)
+        correct += int((preds == labels).sum())
+        total += labels.size(0)
+    return correct / max(total, 1)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--epochs", type=int, default=8)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--eval-batches", type=int, default=20)
+    args = parser.parse_args()
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = TinyCNN().to(device)
-    loader = make_demo_loader()
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    print(f"device: {device}")
 
-    for epoch in range(1, epochs + 1):
+    train_loader, test_loader = build_loaders(args.batch_size)
+    model = build_model().to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.fc.parameters(), lr=args.lr)
+
+    start = time.time()
+    for epoch in range(1, args.epochs + 1):
         model.train()
-        running_loss = 0.0
-        for images, labels in loader:
+        running = 0.0
+        for images, labels in train_loader:
             images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad()
             loss = criterion(model(images), labels)
             loss.backward()
             optimizer.step()
-            running_loss += loss.item()
-        print(f"epoch {epoch}: loss={running_loss / len(loader):.4f}")
+            running += loss.item()
+        acc = evaluate(model, test_loader, device, args.eval_batches)
+        print(f"epoch {epoch}: loss={running / len(train_loader):.4f} test_acc={acc:.4f}")
 
-    torch.save(model.state_dict(), "model.pt")
-    print("saved weights to model.pt")
+    train_seconds = round(time.time() - start, 1)
+    final_acc = evaluate(model, test_loader, device, max_batches=10_000)
+
+    ARTIFACTS.mkdir(exist_ok=True)
+    torch.save(model.state_dict(), WEIGHTS_PATH)
+    metrics = {
+        "dataset": "Oxford Flowers-102",
+        "architecture": "ResNet-18 (frozen backbone, fine-tuned head)",
+        "num_classes": len(FLOWER_CLASSES),
+        "test_accuracy": round(final_acc, 4),
+        "epochs": args.epochs,
+        "train_seconds": train_seconds,
+        "device": str(device),
+    }
+    METRICS_PATH.write_text(json.dumps(metrics, indent=2))
+    print(f"\nsaved weights to {WEIGHTS_PATH}")
+    print(f"final test accuracy: {final_acc:.4f}")
 
 
 if __name__ == "__main__":
-    train()
+    main()

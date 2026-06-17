@@ -1,66 +1,70 @@
-# PyTorch Deploy Starter
+# Flower Classifier — PyTorch, trained to production
 
-A small, production-shaped template for taking a **PyTorch model from notebook to a running API**. Built for students who can train a model but get stuck on the deployment side: serving, containerizing, CI, and shipping to the cloud.
+An end-to-end, open-source PyTorch project that recognizes **102 flower species** and ships as a real service. It is built as a teaching resource for student developers who can train a model but get stuck taking it to production.
 
-Most beginner PyTorch tutorials stop at `model.eval()`. This repo starts there and shows the next mile: wrapping a model in a real HTTP service, testing it, containerizing it, and running it on a cloud instance.
+**What makes it complete:** a fine-tuned PyTorch model, a web demo, a REST API, a container, and CI — the full path from `train.py` to a running app.
 
-## What's inside
+## Results
 
-| Piece | File | Why it matters |
-|-------|------|----------------|
-| Model + inference | `app/model.py` | Loads a pretrained ResNet-18, runs top-k inference |
-| HTTP API | `app/main.py` | FastAPI service with `/predict` and `/health` |
-| Training loop | `train.py` | Minimal, readable PyTorch training you can adapt |
-| Tests | `tests/test_api.py` | Fast, offline tests for the API |
-| Container | `Dockerfile` | CPU-only image that warms the model at build time |
-| CI | `.github/workflows/ci.yml` | Lint + test on every push and PR |
+| | |
+|---|---|
+| Dataset | Oxford Flowers-102 (102 classes, 6,149 test images) |
+| Model | ResNet-18, frozen backbone + fine-tuned classifier head |
+| **Test accuracy** | **86.4%** |
+| Training time | ~21 min on CPU (no GPU needed) |
 
-## Quickstart
+Accuracy and metadata are written to `artifacts/metrics.json` by the trainer, so the numbers above are reproducible, not hand-typed.
 
+## Try it
+
+### Web demo (Gradio)
 ```bash
-# 1. Install (CPU build)
-pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
 pip install -r requirements.txt
+python app.py          # opens a local web UI; drop in a flower photo
+```
 
-# 2. Run the API
+### REST API (FastAPI)
+```bash
 uvicorn app.main:app --reload
-
-# 3. Try it
-curl -F "file=@your-image.jpg" http://localhost:8000/predict
+curl -F "file=@flower.jpg" http://localhost:8000/predict
 # or open http://localhost:8000/docs
 ```
 
-## Run with Docker
-
+### Docker
 ```bash
-docker build -t pytorch-deploy-starter .
-docker run -p 8000:8000 pytorch-deploy-starter
+docker build -t flower-classifier .
+docker run -p 8000:8000 flower-classifier
 ```
 
-## Deploy to AWS (quick path)
+## What's inside
 
-This runs on a free-tier-friendly CPU instance. No GPU required for inference on a small model.
+| Piece | File | Purpose |
+|-------|------|---------|
+| Training | `train.py` | Transfer-learning loop, saves weights + metrics |
+| Model + inference | `app/model.py` | Loads fine-tuned weights, top-k prediction |
+| Web demo | `app.py` | Gradio UI (also the Hugging Face Spaces entry point) |
+| REST API | `app/main.py` | FastAPI `/predict` and `/health` |
+| Labels | `labels.py` | 102 human-readable flower names |
+| Tests | `tests/` | Fast API tests + a real-model integration test |
+| Container | `Dockerfile` | CPU image that ships the trained weights |
+| CI | `.github/workflows/ci.yml` | Lint + test on every push and PR |
 
-1. Launch an EC2 instance (Ubuntu, t3.small is enough for ResNet-18 inference).
-2. Install Docker: `sudo apt update && sudo apt install -y docker.io`.
-3. Clone this repo and `docker build -t pytorch-deploy-starter .`.
-4. `docker run -d -p 80:8000 pytorch-deploy-starter`.
-5. Hit `http://<your-ec2-ip>/docs`.
-
-> Security note: this starter ships **without authentication** so it stays easy to learn from. Before exposing it publicly, add an API key or put it behind a gateway, and restrict the security group to known IPs.
-
-## Train your own model
-
+## Reproduce the training
 ```bash
-python train.py        # writes model.pt
+python train.py --epochs 8
 ```
+This downloads Flowers-102, fine-tunes the head, and writes `artifacts/flowers_resnet18.pt` and `artifacts/metrics.json`.
 
-Then load `model.pt` inside `app/model.py` instead of the pretrained ResNet, and update the labels.
+## Deploy a live demo on Hugging Face Spaces (free)
+1. Create a new Space → SDK: **Gradio**.
+2. Push this repo to the Space (it already has `app.py` and `requirements.txt`).
+3. The Space builds and serves the demo automatically.
 
-## Who built this
+## Why this exists
 
-Created by [Rayyan Shaheer](https://github.com/rayyanshaheer) as a teaching resource for student developers moving from "I trained a model" to "my model is running in production." It pairs PyTorch with the cloud and DevOps workflow (Docker, CI/CD, AWS) that most ML courses skip.
+Most beginner PyTorch tutorials stop at `model.eval()`. Students rarely see the next mile: serving, containerizing, testing, and deploying. This repo shows that whole path on one small, readable project, pairing PyTorch with the cloud and DevOps workflow that ML courses usually skip.
+
+Built by [Rayyan Shaheer](https://github.com/rayyanshaheer) as an open teaching resource for student developers.
 
 ## License
-
 MIT — use it, fork it, teach with it.

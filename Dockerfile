@@ -13,10 +13,9 @@ RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
 COPY app ./app
+COPY labels.py .
+COPY artifacts ./artifacts
 
 EXPOSE 8000
-
-# Warm the model cache at build time so the first request is fast.
-RUN python -c "from app.model import build_model; build_model()"
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
